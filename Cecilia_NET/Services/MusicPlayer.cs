@@ -64,7 +64,7 @@ public class MusicPlayer
 
     public void CloseFileStreams() // Closes FFMPEG, releasing file locks
     {
-        _output?.Flush(); // Close the FFMPEG output
+        _output.SetLength(0); // Close the FFMPEG output
     }
 
     public async Task DeleteNowPlayingMessage(SocketCommandContext context)
@@ -208,7 +208,8 @@ public class MusicPlayer
             await DeleteNowPlayingMessage(context);
 
             // Flush buffer
-            await discord?.FlushAsync();
+            await discord?.ClearAsync(CancellationToken.None)!;
+            CloseFileStreams();
 
             activeClient.Queue.RemoveFirst();
 
@@ -223,12 +224,9 @@ public class MusicPlayer
             await activeClient.Client.SetSpeakingAsync(false);
         }
 
-        if (!previousSkipStatus)
-        {
-            var response = Helpers.CeciliaEmbed(context);
-            response.AddField("That's all folks!", "Spin up some more songs with the play command!");
-            await context.Channel.SendMessageAsync("", false, response.Build());
-        }
+        var response = Helpers.CeciliaEmbed(context);
+        response.AddField("That's all folks!", "Spin up some more songs with the play command!");
+        await context.Channel.SendMessageAsync("", false, response.Build());
     }
 
     public void RegisterAudioClient(ulong guildId, IAudioClient client, ulong channelId)
