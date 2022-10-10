@@ -25,6 +25,4 @@ namespace Cecilia_NET
             ClientSecret = "";
         }
     }
-    
-    
 }

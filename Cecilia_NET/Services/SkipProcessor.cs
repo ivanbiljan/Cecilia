@@ -25,8 +25,8 @@ namespace Cecilia_NET.Services
         {
             // Get voice channel
             var correctChannel = context.Guild.GetVoiceChannel(voiceChannelId);
-            
-            int votesNeeded = Convert.ToInt32(Math.Ceiling(Convert.ToDouble(correctChannel.Users.Count() - 1) / 2.0));
+
+            int votesNeeded = 1;
             // There isnt a skip already in motion
             if (_currentSkip == null)
             {
