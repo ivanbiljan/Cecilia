@@ -10,403 +10,399 @@ using Discord;
 using Discord.Audio;
 using Discord.Commands;
 using Discord.Rest;
-using SpotifyAPI.Web;
-using YoutubeExplode;
 using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 
-namespace Cecilia_NET.Services
+namespace Cecilia_NET.Services;
+
+public class MusicPlayer
 {
-    public class MusicPlayer
+    private Process _ffmpeg; // The process for the FFMPEG library
+
+    private Stream _output; // The FFMPEG library ouput stream
+
+    public MusicPlayer() // Constructor
     {
-        private Process _ffmpeg; // The process for the FFMPEG library
+        ActiveAudioClients = new Dictionary<ulong, WrappedAudioClient>();
+        NowPlayingMessage = null;
+    }
 
-        private Stream _output; // The FFMPEG library ouput stream
+    public Dictionary<ulong, WrappedAudioClient> ActiveAudioClients { get; }
 
-        public RestUserMessage NowPlayingMessage { get; set; }// A reference to the "Now Playing" message
+    public RestUserMessage NowPlayingMessage { get; set; } // A reference to the "Now Playing" message
 
-        public MusicPlayer() // Constructor
+    public async Task<EmbedBuilder> AddSongToQueue(
+        SocketCommandContext context,
+        string filePath,
+        Video videoData,
+        IStreamInfo streamData,
+        string searchTerm,
+        bool toDownload)
+    {
+        var activeClient = ActiveAudioClients[context.Guild.Id];
+        // THIS METHOD REQUIRES A MUTEX INCASE MULTIPLE SONGS ARE QUEUED UP IN QUICK SUCCESSION
+        // Find the mutex for this queue
+        var mutex = ActiveAudioClients[context.Guild.Id].QueueMutex;
+        // Wait for it to be free
+        mutex.WaitOne(-1);
+        await Bot.CreateLogEntry(LogSeverity.Info, "Music Player", "Adding to queue for guild: " + context.Guild.Id);
+        // Add song to queue
+        activeClient.Queue.AddLast(
+            new QueueEntry(filePath, searchTerm, videoData, streamData, Helpers.CeciliaEmbed(context), !toDownload));
+        // Release mutex
+        await Bot.CreateLogEntry(LogSeverity.Info, "Music Player", "Added to queue for guild: " + context.Guild.Id);
+        mutex.ReleaseMutex();
+
+        // Check if we need to download
+        // If the queue is empty or queue size is one then there is nothing playing so download, or it is next up so download
+        // If queue is > 1 in size then there is something playing, and there is a song ready, so dont download. mark not downloaded
+        // However if this is false then it is already downloaded so just ignore
+        if (toDownload)
         {
-            _activeAudioClients = new Dictionary<ulong, WrappedAudioClient>();
-            NowPlayingMessage = null;
-        }
-
-        public void CloseFileStreams() // Closes FFMPEG, releasing file locks
-        {
-            if (_ffmpeg != null) _ffmpeg.Close(); // Close the FFMPEG process
-            if (_output != null) _output.Close(); // Close the FFMPEG output
-        }
-        
-        public void RegisterAudioClient(ulong guildId,IAudioClient client,ulong channelId)
-        {
-            // Add the audio client
-            _activeAudioClients.Add(guildId, new WrappedAudioClient(client));
-            _activeAudioClients[guildId].ConnectedChannelId = channelId;
-
-            Bot.CreateLogEntry(LogSeverity.Info,"Music Player","Client Added");
-        }
-
-        public void RemoveAudioClient(ulong guildId)
-        {
-            _activeAudioClients.Remove(guildId);
-
-            Bot.CreateLogEntry(LogSeverity.Info, "Music Player", "Client Removed");
-        }
-
-        public async Task<EmbedBuilder> AddSongToQueue(SocketCommandContext context,string filePath,Video videoData,IStreamInfo streamData, string searchTerm, bool toDownload)
-        {
-            var activeClient = _activeAudioClients[context.Guild.Id];
-            // THIS METHOD REQUIRES A MUTEX INCASE MULTIPLE SONGS ARE QUEUED UP IN QUICK SUCCESSION
-            // Find the mutex for this queue
-            var mutex = _activeAudioClients[context.Guild.Id].QueueMutex;
-            // Wait for it to be free
-            mutex.WaitOne(-1);
-            await Bot.CreateLogEntry(LogSeverity.Info,"Music Player","Adding to queue for guild: " + context.Guild.Id);
-            // Add song to queue
-            activeClient.Queue.AddLast(new QueueEntry(filePath, searchTerm, videoData,streamData,Helpers.CeciliaEmbed(context),!toDownload));
-            // Release mutex
-            await Bot.CreateLogEntry(LogSeverity.Info,"Music Player","Added to queue for guild: " + context.Guild.Id);
-            mutex.ReleaseMutex();
-            
-            // Check if we need to download
-            // If the queue is empty or queue size is one then there is nothing playing so download, or it is next up so download
-            // If queue is > 1 in size then there is something playing, and there is a song ready, so dont download. mark not downloaded
-            // However if this is false then it is already downloaded so just ignore
-            if (toDownload)
+            // Check queue
+            if (activeClient.Queue.Count <= 2)
             {
-                // Check queue
-                if (activeClient.Queue.Count <= 2)
-                {
-                    await Helpers.DownloadSong(activeClient.Queue.Last.Value.StreamInfo, activeClient.Queue.Last.Value.FilePath);
-                    activeClient.Queue.Last.Value.IsDownloaded = true;
-                }
-                else
-                {
-                    // Mark download needed
-                    activeClient.Queue.Last.Value.IsDownloaded = false;
-                }
+                await Helpers.DownloadSong(
+                    activeClient.Queue.Last.Value.StreamInfo,
+                    activeClient.Queue.Last.Value.FilePath);
+                activeClient.Queue.Last.Value.IsDownloaded = true;
             }
-            
-            // create embed
-            // Caching so it can be modified for playing message
-            var activeEmbed = _activeAudioClients[context.Guild.Id].Queue.Last.Value.EmbedBuilder;
-
-            activeEmbed.WithImageUrl(videoData.Thumbnails[0].Url);
-            activeEmbed.WithTitle("Added song!");// This can be switched later
-            activeEmbed.AddField("Title",$"[{videoData.Title}]({videoData.Url})");
-            activeEmbed.AddField("Length", videoData.Duration?.Minutes + " min " + videoData.Duration?.Seconds + " secs");
-            activeEmbed.AddField("Uploader", videoData.Author);
-            activeEmbed.AddField("Queue Position", _activeAudioClients[context.Guild.Id].Queue.Count);
-
-            // Pass back
-            return activeEmbed;
+            else
+            {
+                // Mark download needed
+                activeClient.Queue.Last.Value.IsDownloaded = false;
+            }
         }
 
-        public async Task PlayAudio(SocketCommandContext context,SkipProcessor skipProcessor)
+        // create embed
+        // Caching so it can be modified for playing message
+        var activeEmbed = ActiveAudioClients[context.Guild.Id].Queue.Last.Value.EmbedBuilder;
+
+        activeEmbed.WithImageUrl(videoData.Thumbnails[0].Url);
+        activeEmbed.WithTitle("Added song!"); // This can be switched later
+        activeEmbed.AddField("Title", $"[{videoData.Title}]({videoData.Url})");
+        activeEmbed.AddField("Length", videoData.Duration?.Minutes + " min " + videoData.Duration?.Seconds + " secs");
+        activeEmbed.AddField("Uploader", videoData.Author);
+        activeEmbed.AddField("Queue Position", ActiveAudioClients[context.Guild.Id].Queue.Count);
+
+        // Pass back
+        return activeEmbed;
+    }
+
+    public void CloseFileStreams() // Closes FFMPEG, releasing file locks
+    {
+        if (_ffmpeg != null)
         {
-            // TODO: add checks if this used outside of the add song command
-            // Find correct client
-            var activeClient = _activeAudioClients[context.Guild.Id];
-            if (activeClient != null)
+            _ffmpeg.Close(); // Close the FFMPEG process
+        }
+
+        if (_output != null)
+        {
+            _output.Close(); // Close the FFMPEG output
+        }
+    }
+
+    public async Task DeleteNowPlayingMessage(SocketCommandContext context)
+    {
+        if (NowPlayingMessage != null)
+        {
+            await context.Channel.DeleteMessageAsync(NowPlayingMessage);
+        }
+    }
+
+    public async Task PlayAudio(SocketCommandContext context)
+    {
+        // TODO: add checks if this used outside of the add song command
+        // Find correct client
+        var activeClient = ActiveAudioClients[context.Guild.Id];
+        if (activeClient != null)
+        {
+            var previousSkipStatus = false;
+            // Check if already playing audio
+            if (activeClient.Playing)
             {
-                var previousSkipStatus = false;
-                // Check if already playing audio
-                if (activeClient.Playing)
+                // exit no need
+                return;
+            }
+
+            // Check queue status
+            if (activeClient.Queue.Count != 0)
+            {
+                // Set playing
+                activeClient.Playing = true;
+                // While there are songs to play
+                while (activeClient.Playing)
                 {
-                    // exit no need
-                    return;
-                }
-                // Check queue status
-                if (activeClient.Queue.Count != 0)
-                {
-                    // Set playing
-                    activeClient.Playing = true;
-                    // While there are songs to play
-                    while (activeClient.Playing)
+                    // Check if song is downloaded
+                    if (!activeClient.Queue.First.Value.IsDownloaded)
                     {
-                        // Check if song is downloaded
-                        if (!activeClient.Queue.First.Value.IsDownloaded)
-                        {
-                            await Helpers.DownloadSong(activeClient.Queue.First.Value.StreamInfo, activeClient.Queue.First.Value.FilePath);
-                        }
-                        // Get song from queue
-                        var filePath = activeClient.Queue.First.Value.FilePath;
-                        _ffmpeg = CreateStream(filePath);
-                        // Setup ffmpeg output
-                        _output = _ffmpeg.StandardOutput.BaseStream;
-                        // Create discord pcm stream
-                        await using var discord = activeClient.Client.CreatePCMStream(AudioApplication.Music);
-                        // Set speaking indicator
-                        await activeClient.Client.SetSpeakingAsync(true);
-                        // Send playing message
-                        // Modify embed
-                        var activeEmbed = activeClient.Queue.First.Value.EmbedBuilder;
-                        // Set playing title
-                        activeEmbed.WithTitle("Now Playing!");
-                        // Remove queue counter at the end of fields
-                        activeEmbed.Fields.RemoveAt(activeEmbed.Fields.Count - 1);
-                        //
-                        var spotifyQuery = await Helpers.SpotifyQuery(activeClient.Queue.First.Value.SearchTerm, activeClient.Queue.First.Value.MetaData.Title);
-                        
-                        // Match video to query to improve match
-
-                        if (spotifyQuery != null)
-                        {
-                            if (spotifyQuery.Count != 0)
-                            {
-                                var spotifyHyperlink = $" [Listen on Spotify](https://open.spotify.com/track/{spotifyQuery[0].Id})";
-
-                                activeEmbed.AddField("Music Platforms",spotifyHyperlink);
-                            }
-
-                        }
-                        // Send
-                        NowPlayingMessage = await context.Channel.SendMessageAsync("", false, activeEmbed.Build());
-
-                        // Pin "Now-Playing" to the text channel
-                        await NowPlayingMessage.PinAsync();
-
-                        // Delete the "Cecilia pinned a message..." message
-                        var messages = context.Channel.GetMessagesAsync(1).Flatten();
-
-                        await context.Channel.DeleteMessageAsync(messages.ToArrayAsync().Result[0].Id);
-
-                        // Stream and await till finish
-                        while (true)
-                        {
-                            // Stream is over, broken, or skip requested
-                            if (_ffmpeg.HasExited || discord == null || activeClient.Skip)  
-                            {
-                                previousSkipStatus = activeClient.Skip;
-                                CloseFileStreams();
-                                break;
-                            }
-                            
-                            // Pause function while not playing
-                            if (activeClient.Paused) continue;
-                            
-                            // Read a block of stream
-                            int blockSize = 1920;
-                            byte[] buffer = new byte[blockSize];
-                            var byteCount = await _output.ReadAsync(buffer, 0, blockSize);
-                            
-                            // Stream cannot be read or file is ended
-                            if (byteCount <= 0) break;
-
-                            // Write output to stream
-                            try
-                            {
-                                await discord.WriteAsync(buffer, 0, byteCount);
-                            }
-                            catch (Exception e)
-                            {
-                                // Flush buffer
-                                await discord?.FlushAsync();
-                                // Output exception
-                                await Bot.CreateLogEntry(LogSeverity.Error, "MusicPlayer", e.ToString());
-                                // Delete now-playing as it is now out of date
-                                await DeleteNowPlayingMessage(context);
-                                throw;
-                            }
-                        }
-                        // Cancel any skips
-                        
-                        skipProcessor.ClearSkip(context);
-
-                        // Delete now-playing as it is now out of date
-                        await DeleteNowPlayingMessage(context);
-
-                        // Flush buffer
-                        await discord?.FlushAsync();
-
-                        // Delete used file && release queue
-                        activeClient.Queue.RemoveFirst();
-                        // Check queue. If same song is queued do not delete file
-                        // TODO: THIS MIGHT BREAK IF MULTIPLE SERVERS QUEUE THE SAME SONG AT THE SAME TIME SO COME LOOK AT THIS WHEN YOU CAN BE BOTHERED
-                        var found = false;
-                        // Check all active queues
-                        foreach (var client in ActiveAudioClients)
-                        {
-                            if (client.Value.Queue.Count != 0)
-                            {
-                                // Check file before cont
-                                // Stops file deleting if same song is multi queued
-                                // TODO: This sucks. make it more efficient - Michael
-                                // Check each item in this queue
-                                foreach (var queueItem in activeClient.Queue)
-                                {
-                                    // If we find the song in queue
-                                    if (queueItem.FilePath.Equals(filePath))
-                                    {
-                                        // Mark for no delete
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            // We have found it, dont look through other queues
-                            if (found)
-                            {
-                                break;
-                            }
-                        }
-                        // If this is still false all queues have been check and it isnt there
-                        if (!found)
-                        {
-                            // Catch windows requirement for File.Delete
-                            try
-                            {
-                                if (Bot.OsPlatform == OSPlatform.Windows)
-                                {
-                                    string fullPath = Directory.GetCurrentDirectory() + @"\" + filePath;
-
-                                    System.IO.File.Delete(fullPath);
-                                }
-                                else
-                                {
-                                    System.IO.File.Delete(filePath);
-                                }
-                                
-                            }
-                            catch (Exception e)
-                            {
-                                await Bot.CreateLogEntry(LogSeverity.Error,"Music Player",e.ToString());
-                            }
-                        }
-
-
-                        // No more songs so exit
-                        if (activeClient.Queue.Count == 0)
-                        {
-                            activeClient.Playing = false;
-                        }
-                        // Reset skip trigger
-                        activeClient.Skip = false;
-                        await activeClient.Client.SetSpeakingAsync(false);
+                        await Helpers.DownloadSong(
+                            activeClient.Queue.First.Value.StreamInfo,
+                            activeClient.Queue.First.Value.FilePath);
                     }
-                }
 
-                if (!previousSkipStatus)
-                {
-                    var response = Helpers.CeciliaEmbed(context);
-                    response.AddField("That's all folks!", "Spin up some more songs with the play command!");
-                    await context.Channel.SendMessageAsync("", false, response.Build());
+                    // Get song from queue
+                    var filePath = activeClient.Queue.First.Value.FilePath;
+                    _ffmpeg = CreateStream(filePath);
+                    // Setup ffmpeg output
+                    _output = _ffmpeg.StandardOutput.BaseStream;
+                    // Create discord pcm stream
+                    await using var discord = activeClient.Client.CreatePCMStream(AudioApplication.Music);
+                    // Set speaking indicator
+                    await activeClient.Client.SetSpeakingAsync(true);
+                    // Send playing message
+                    // Modify embed
+                    var activeEmbed = activeClient.Queue.First.Value.EmbedBuilder;
+                    // Set playing title
+                    activeEmbed.WithTitle("Now Playing!");
+                    // Remove queue counter at the end of fields
+                    activeEmbed.Fields.RemoveAt(activeEmbed.Fields.Count - 1);
+                    //
+                    var spotifyQuery = await Helpers.SpotifyQuery(
+                        activeClient.Queue.First.Value.SearchTerm,
+                        activeClient.Queue.First.Value.MetaData.Title);
+
+                    // Match video to query to improve match
+
+                    if (spotifyQuery != null)
+                    {
+                        if (spotifyQuery.Count != 0)
+                        {
+                            var spotifyHyperlink =
+                                $" [Listen on Spotify](https://open.spotify.com/track/{spotifyQuery[0].Id})";
+
+                            activeEmbed.AddField("Music Platforms", spotifyHyperlink);
+                        }
+                    }
+
+                    // Send
+                    NowPlayingMessage = await context.Channel.SendMessageAsync("", false, activeEmbed.Build());
+
+                    // Pin "Now-Playing" to the text channel
+                    await NowPlayingMessage.PinAsync();
+
+                    // Delete the "Cecilia pinned a message..." message
+                    var messages = context.Channel.GetMessagesAsync(1).Flatten();
+
+                    await context.Channel.DeleteMessageAsync(messages.ToArrayAsync().Result[0].Id);
+
+                    // Stream and await till finish
+                    while (true)
+                    {
+                        // Stream is over, broken, or skip requested
+                        if (_ffmpeg.HasExited || discord == null || activeClient.Skip)
+                        {
+                            previousSkipStatus = activeClient.Skip;
+                            CloseFileStreams();
+
+                            break;
+                        }
+
+                        // Pause function while not playing
+                        if (activeClient.Paused)
+                        {
+                            continue;
+                        }
+
+                        // Read a block of stream
+                        var blockSize = 1920;
+                        var buffer = new byte[blockSize];
+                        var byteCount = await _output.ReadAsync(buffer, 0, blockSize);
+
+                        // Stream cannot be read or file is ended
+                        if (byteCount <= 0)
+                        {
+                            break;
+                        }
+
+                        // Write output to stream
+                        try
+                        {
+                            await discord.WriteAsync(buffer, 0, byteCount);
+                        }
+                        catch (Exception e)
+                        {
+                            // Flush buffer
+                            await discord?.FlushAsync();
+                            // Output exception
+                            await Bot.CreateLogEntry(LogSeverity.Error, "MusicPlayer", e.ToString());
+                            // Delete now-playing as it is now out of date
+                            await DeleteNowPlayingMessage(context);
+
+                            throw;
+                        }
+                    }
+
+                    // Delete now-playing as it is now out of date
+                    await DeleteNowPlayingMessage(context);
+
+                    // Flush buffer
+                    await discord?.FlushAsync();
+
+                    // Delete used file && release queue
+                    activeClient.Queue.RemoveFirst();
+                    // Check queue. If same song is queued do not delete file
+                    // TODO: THIS MIGHT BREAK IF MULTIPLE SERVERS QUEUE THE SAME SONG AT THE SAME TIME SO COME LOOK AT THIS WHEN YOU CAN BE BOTHERED
+                    var found = false;
+                    // Check all active queues
+                    foreach (var client in ActiveAudioClients)
+                    {
+                        if (client.Value.Queue.Count != 0)
+                        {
+                            // Check file before cont
+                            // Stops file deleting if same song is multi queued
+                            // TODO: This sucks. make it more efficient - Michael
+                            // Check each item in this queue
+                            foreach (var queueItem in activeClient.Queue)
+                            {
+                                // If we find the song in queue
+                                if (queueItem.FilePath.Equals(filePath))
+                                {
+                                    // Mark for no delete
+                                    found = true;
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        // We have found it, dont look through other queues
+                        if (found)
+                        {
+                            break;
+                        }
+                    }
+
+                    // If this is still false all queues have been check and it isnt there
+                    if (!found)
+                    {
+                        // Catch windows requirement for File.Delete
+                        try
+                        {
+                            if (Bot.OsPlatform == OSPlatform.Windows)
+                            {
+                                var fullPath = Directory.GetCurrentDirectory() + @"\" + filePath;
+
+                                File.Delete(fullPath);
+                            }
+                            else
+                            {
+                                File.Delete(filePath);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            await Bot.CreateLogEntry(LogSeverity.Error, "Music Player", e.ToString());
+                        }
+                    }
+
+
+                    // No more songs so exit
+                    if (activeClient.Queue.Count == 0)
+                    {
+                        activeClient.Playing = false;
+                    }
+
+                    // Reset skip trigger
+                    activeClient.Skip = false;
+                    await activeClient.Client.SetSpeakingAsync(false);
                 }
             }
-        }
 
-        public async Task DeleteNowPlayingMessage(SocketCommandContext context)
-        {
-            if (NowPlayingMessage != null)
+            if (!previousSkipStatus)
             {
-                await context.Channel.DeleteMessageAsync(NowPlayingMessage);
+                var response = Helpers.CeciliaEmbed(context);
+                response.AddField("That's all folks!", "Spin up some more songs with the play command!");
+                await context.Channel.SendMessageAsync("", false, response.Build());
             }
         }
+    }
 
-        private Process CreateStream(string path)
-        {
-            return Process.Start(new ProcessStartInfo
+    public void RegisterAudioClient(ulong guildId, IAudioClient client, ulong channelId)
+    {
+        // Add the audio client
+        ActiveAudioClients.Add(guildId, new WrappedAudioClient(client));
+        ActiveAudioClients[guildId].ConnectedChannelId = channelId;
+
+        Bot.CreateLogEntry(LogSeverity.Info, "Music Player", "Client Added");
+    }
+
+    public void RemoveAudioClient(ulong guildId)
+    {
+        ActiveAudioClients.Remove(guildId);
+
+        Bot.CreateLogEntry(LogSeverity.Info, "Music Player", "Client Removed");
+    }
+
+    private Process CreateStream(string path) =>
+        Process.Start(
+            new ProcessStartInfo
             {
                 FileName = "ffmpeg",
                 Arguments = $"-hide_banner -loglevel panic -i \"{path}\" -ac 2 -f s16le -ar 48000 pipe:1",
                 UseShellExecute = false,
-                RedirectStandardOutput = true,
+                RedirectStandardOutput = true
             });
-        }
-        
-        // Wraps the client with a queue and a mutex control for data access.
-        public class WrappedAudioClient
+
+    // Wraps the client with a queue and a mutex control for data access.
+    public class WrappedAudioClient
+    {
+        // The raw client
+
+        // Control over playing
+
+        // Queue and a mutex for accessing
+
+        public WrappedAudioClient(IAudioClient client)
         {
-            // The raw client
-            private IAudioClient _client;
-            private ulong _connectedChannelId;
-            
-            // Queue and a mutex for accessing
-            private LinkedList<QueueEntry> _queue;
-            private Mutex _mutex;
-            
-            // Control over playing
-            private bool _playing;
-            private bool _paused;
-            private bool _skip;
-
-            public WrappedAudioClient(IAudioClient client)
-            {
-                _client = client;
-                _queue = new LinkedList<QueueEntry>();
-                _playing = false;
-                _paused = false;
-                _skip = false;
-                _mutex = new Mutex();
-                _connectedChannelId = 0;
-            }
-
-            public IAudioClient Client
-            {
-                get => _client;
-                set => _client = value;
-            }
-
-            public ulong ConnectedChannelId
-            {
-                get => _connectedChannelId;
-                set => _connectedChannelId = value;
-            }
-
-            public LinkedList<QueueEntry> Queue
-            {
-                get => _queue;
-                set => _queue = value;
-            }
-
-            public bool Playing
-            {
-                get => _playing;
-                set => _playing = value;
-            }
-
-            public bool Paused
-            {
-                get => _paused;
-                set => _paused = value;
-            }
-
-            public bool Skip
-            {
-                get => _skip;
-                set => _skip = value;
-            }
-
-            public Mutex QueueMutex
-            {
-                get => _mutex;
-                set => _mutex = value;
-            }
-
+            Client = client;
+            Queue = new LinkedList<QueueEntry>();
+            Playing = false;
+            Paused = false;
+            Skip = false;
+            QueueMutex = new Mutex();
+            ConnectedChannelId = 0;
         }
 
-        public class QueueEntry
+        public IAudioClient Client { get; set; }
+
+        public ulong ConnectedChannelId { get; set; }
+
+        public bool Paused { get; set; }
+
+        public bool Playing { get; set; }
+
+        public LinkedList<QueueEntry> Queue { get; set; }
+
+        public Mutex QueueMutex { get; set; }
+
+        public bool Skip { get; set; }
+    }
+
+    public class QueueEntry
+    {
+        public QueueEntry(
+            string filePath,
+            string searchTerm,
+            Video metaData,
+            IStreamInfo streamInfo,
+            EmbedBuilder embedBuilder,
+            bool isDownloaded)
         {
-            public string FilePath { get; set; }
-            public string SearchTerm { get; set; }
-            public Video MetaData { get; set; }
-            public IStreamInfo StreamInfo { get; set; }
-            public EmbedBuilder EmbedBuilder { get; set; }
-            
-            public bool IsDownloaded { get; set; }
-
-            public QueueEntry(string filePath, string searchTerm, Video metaData, IStreamInfo streamInfo, EmbedBuilder embedBuilder, bool isDownloaded)
-            {
-                FilePath = filePath;
-                SearchTerm = searchTerm;
-                MetaData = metaData;
-                StreamInfo = streamInfo;
-                EmbedBuilder = embedBuilder;
-                IsDownloaded = isDownloaded;
-            }
+            FilePath = filePath;
+            SearchTerm = searchTerm;
+            MetaData = metaData;
+            StreamInfo = streamInfo;
+            EmbedBuilder = embedBuilder;
+            IsDownloaded = isDownloaded;
         }
-        private readonly Dictionary<ulong,WrappedAudioClient> _activeAudioClients;
 
-        public Dictionary<ulong, WrappedAudioClient> ActiveAudioClients => _activeAudioClients;
+        public EmbedBuilder EmbedBuilder { get; set; }
+        public string FilePath { get; set; }
+
+        public bool IsDownloaded { get; set; }
+        public Video MetaData { get; set; }
+        public string SearchTerm { get; set; }
+        public IStreamInfo StreamInfo { get; set; }
     }
 }

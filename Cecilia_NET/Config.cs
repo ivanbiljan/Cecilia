@@ -1,28 +1,13 @@
-using SpotifyAPI.Web;
+namespace Cecilia_NET;
 
-namespace Cecilia_NET
+public class DiscordConfig
 {
-    public class DiscordConfig
-    {
-        public string Token { get; set; }
-        public string Prefix { get; set; }
+    public string Prefix { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
+}
 
-        public DiscordConfig()
-        {
-            Token = "";
-            Prefix = "";
-        }
-    }
-
-    public class SpotifyClientData
-    {
-        public string ClientId { get; set; }
-        public string ClientSecret { get; set; }
-
-        public SpotifyClientData()
-        {
-            ClientId = "";
-            ClientSecret = "";
-        }
-    }
+public class SpotifyClientData
+{
+    public string ClientId { get; set; } = string.Empty;
+    public string ClientSecret { get; set; } = string.Empty;
 }
