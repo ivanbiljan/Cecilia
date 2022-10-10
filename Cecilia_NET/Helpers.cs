@@ -34,21 +34,7 @@ namespace Cecilia_NET
         }
 
         // Delete the message that sent the command
-        public static async void DeleteUserCommand(SocketCommandContext context)
-        {
-            if (context.Channel.GetMessageAsync(context.Message.Id).Result == null) return;
-            
-            await context.Channel.DeleteMessageAsync(context.Message.Id);
 
-        }
-
-        public static async void DeleteCommand(SocketCommandContext context, ulong messageId)
-        {
-            if (context.Channel.GetMessageAsync(messageId).Result == null) return;
-
-            await context.Channel.DeleteMessageAsync(messageId);
-        }
-    
         // Remove characters that could break filenames & paths
         public static string ProcessVideoTitle(string videoTitle)
         {
@@ -88,7 +74,7 @@ namespace Cecilia_NET
         }
         
         // Add a 0 before numbers number 9
-        public static String FixTime(int time)
+        public static string FixTime(int time)
         {
             return time <= 9 ? $"0{time}" : time.ToString();
         }

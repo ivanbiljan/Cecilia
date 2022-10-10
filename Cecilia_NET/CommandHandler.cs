@@ -61,7 +61,6 @@ namespace Cecilia_NET
             var commandExists = _commandService.Search(context, argPos);
             if (!commandExists.IsSuccess)
             {
-                Helpers.DeleteUserCommand(context);
                 var response = Helpers.CeciliaEmbed(context);
                 response.AddField("Invalid command!", "Do --help to see all my commands!");
                 await context.Channel.SendMessageAsync("",false,response.Build());

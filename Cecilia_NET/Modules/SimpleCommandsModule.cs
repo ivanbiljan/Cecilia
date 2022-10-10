@@ -19,7 +19,6 @@ namespace Cecilia_NET.Modules
         [Summary("Pings a message back. Allows checking of health")]
         public async Task PingAsync()
         {
-            Helpers.DeleteUserCommand(Context);
             var response = Helpers.CeciliaEmbed(Context);
             response.AddField("Pong!", "Im here, thanks for checking on me!");
             await Context.Channel.SendMessageAsync("",false,response.Build());
@@ -30,7 +29,6 @@ namespace Cecilia_NET.Modules
         public async Task WhoisAsync([Summary("The user to query")] SocketUser user)
         {
             // Delete sending message
-            Helpers.DeleteUserCommand(Context);
 
             // Cast to guild specific data
             if (!(user is SocketGuildUser guildUser)) return;
@@ -64,8 +62,6 @@ namespace Cecilia_NET.Modules
         [Command("Help")]
         public async Task Help()
         {
-            Helpers.DeleteUserCommand(Context);
-            
             List<CommandInfo> commands = _commandService.Commands.ToList();
             EmbedBuilder embedBuilder = Helpers.CeciliaEmbed(Context);
 

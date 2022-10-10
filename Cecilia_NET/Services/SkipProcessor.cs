@@ -88,8 +88,7 @@ namespace Cecilia_NET.Services
                     // Save old embed
                     var oldEmbed = _currentSkip.MessageToDelete.Embeds.ToList()[0];
                     // Delete and send new
-                    Helpers.DeleteCommand(context,_currentSkip.MessageToDelete.Id);
-                        
+
                     var response = Helpers.CeciliaEmbed(context);
                     response.WithFooter(oldEmbed.Footer.ToString());
                     response.AddField("Skip request begun!", $"Let's hope people agree with you! Votes: {1}/{votesNeeded}");
@@ -118,7 +117,6 @@ namespace Cecilia_NET.Services
         {
             if (_currentSkip != null)
             {
-                Helpers.DeleteCommand(context,_currentSkip.MessageToDelete.Id);
             }
             _currentSkip = null;
         }

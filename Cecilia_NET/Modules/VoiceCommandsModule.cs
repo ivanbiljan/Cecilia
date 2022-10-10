@@ -37,7 +37,6 @@ namespace Cecilia_NET.Modules
                     response.AddField("I'm already connected!", "Drag me to a different room if you want to switch.");
                     await Context.Channel.SendMessageAsync("",false,response.Build());
                     // Delete the user command
-                    Helpers.DeleteUserCommand(Context);
                     return;
                 }
             }
@@ -55,9 +54,8 @@ namespace Cecilia_NET.Modules
                 response.AddField("Please first join a channel! ", "Alternatively specify a valid channel as an argument.");
                 await Context.Channel.SendMessageAsync("",false,response.Build());
                     // Delete the user command
-                Helpers.DeleteUserCommand(Context);
 
-                return;
+                    return;
             }
             
             // Now we have a valid context, channel and guild
@@ -70,7 +68,6 @@ namespace Cecilia_NET.Modules
             await Context.Channel.SendMessageAsync("",false,response.Build());
 
             // Delete the user command
-            Helpers.DeleteUserCommand(Context);
         }
 
         [Command("Leave", RunMode = RunMode.Async)]
@@ -79,8 +76,7 @@ namespace Cecilia_NET.Modules
         {
             
             // Delete the user command
-            Helpers.DeleteUserCommand(Context);
-            
+
             // Check validity of command
             if (!Helpers.ChannelValidity(Context, _musicPlayer))
             {
@@ -164,8 +160,7 @@ namespace Cecilia_NET.Modules
         public async Task PlayAsync([Remainder] [Summary("The URL to play.")] string uri)
         {
             // Delete user command if not deleted by join
-            Helpers.DeleteUserCommand(Context);
-            
+
             var response = Helpers.CeciliaEmbed(Context);
             // No playlist links yet
             if (uri.Contains("playlist?list=", StringComparison.Ordinal))
@@ -276,8 +271,7 @@ namespace Cecilia_NET.Modules
         public async Task SkipAsync()
         {
             // Delete the user command
-            Helpers.DeleteUserCommand(Context);
-            
+
             // Check the validity of the user executing this command
             if (!Helpers.ChannelValidity(Context, _musicPlayer))
             {
@@ -309,8 +303,7 @@ namespace Cecilia_NET.Modules
         public async Task PauseAsync()
         {
             // Delete the user command
-            Helpers.DeleteUserCommand(Context);
-            
+
             // Check validity of command
             if (!Helpers.ChannelValidity(Context, _musicPlayer))
             {
@@ -336,8 +329,7 @@ namespace Cecilia_NET.Modules
         public async Task ResumeAsync()
         {
             // Delete the user command
-            Helpers.DeleteUserCommand(Context);
-            
+
             // Check validity of command
             if (!Helpers.ChannelValidity(Context, _musicPlayer))
             {
@@ -383,7 +375,6 @@ namespace Cecilia_NET.Modules
                 await Context.Channel.SendMessageAsync("", false, embedBuilder.Build());
                 
                 // Delete message
-                Helpers.DeleteUserCommand(Context);
 
                 return;
             }
@@ -414,7 +405,6 @@ namespace Cecilia_NET.Modules
             
             await Context.Channel.SendMessageAsync("", false, embedBuilder.Build());
             // Delete message
-            Helpers.DeleteUserCommand(Context);
         }
 
         private readonly MusicPlayer _musicPlayer;
