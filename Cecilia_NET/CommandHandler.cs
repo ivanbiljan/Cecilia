@@ -18,14 +18,14 @@ public class CommandHandler
     // From config
     // TODO: Add a config file if this gets big
     private readonly string _commandPrefix;
-    private readonly CommandService _commandService;
-    private readonly IServiceProvider _services;
-    private bool _commandExecuting;
 
     // Command queuing
     private readonly Queue<QueuedCommand> _commandQueue;
+    private readonly CommandService _commandService;
 
     private readonly Mutex _mutex;
+    private readonly IServiceProvider _services;
+    private bool _commandExecuting;
 
     // Constructor
     public CommandHandler(
@@ -129,10 +129,10 @@ public class CommandHandler
     // Command for the queue
     internal class QueuedCommand
     {
-        private readonly CommandService _commandService;
-        private readonly IServiceProvider _services;
         private readonly int _argPos;
+        private readonly CommandService _commandService;
         private readonly SocketCommandContext _context;
+        private readonly IServiceProvider _services;
 
         public QueuedCommand(
             CommandService commandService,

@@ -407,16 +407,16 @@ public class VoiceCommandsModule : ModuleBase<SocketCommandContext>
         {
             return;
         }
-        
+
         _musicPlayer.ActiveAudioClients[Context.Guild.Id].Skip = true;
-        
+
         var response = Helpers.CeciliaEmbed(Context);
         response.AddField(
             "Skipping Song!",
             _musicPlayer.ActiveAudioClients[Context.Guild.Id]?.Queue.Count > 1
                 ? "Onto the next one..."
                 : "Spin up some more songs with the play command!");
-        
+
         await Context.Channel.SendMessageAsync("", false, response.Build());
     }
 }

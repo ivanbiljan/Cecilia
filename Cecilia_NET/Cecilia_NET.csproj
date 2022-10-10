@@ -8,24 +8,24 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Discord.Net" Version="2.4.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.2" />
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-        <PackageReference Include="SpotifyAPI.Web" Version="6.2.1" />
-        <PackageReference Include="YoutubeExplode" Version="6.0.5" />
-        <PackageReference Include="YouTubeSearch" Version="2.2.6" />
+        <PackageReference Include="Discord.Net" Version="2.4.0"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.2"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.1"/>
+        <PackageReference Include="SpotifyAPI.Web" Version="6.2.1"/>
+        <PackageReference Include="YoutubeExplode" Version="6.0.5"/>
+        <PackageReference Include="YouTubeSearch" Version="2.2.6"/>
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Remove="Trastevere\**" />
+        <Compile Remove="Trastevere\**"/>
     </ItemGroup>
 
     <ItemGroup>
-        <EmbeddedResource Remove="Trastevere\**" />
+        <EmbeddedResource Remove="Trastevere\**"/>
     </ItemGroup>
 
     <ItemGroup>
-        <None Remove="Trastevere\**" />
+        <None Remove="Trastevere\**"/>
     </ItemGroup>
 
 </Project>

@@ -290,21 +290,27 @@ public class Bot
         // Track voice changes
         _client.UserVoiceStateUpdated += (user, oState, nState) =>
         {
-            if (user.Username == _client.CurrentUser.Username)
+            if (user.Username != _client.CurrentUser.Username)
             {
-                if (nState.VoiceChannel != null)
-                {
-                    if (_musicPlayerSingleton.ActiveAudioClients.ContainsKey(nState.VoiceChannel.Guild.Id))
-                    {
-                        _musicPlayerSingleton.ActiveAudioClients[nState.VoiceChannel.Guild.Id].ConnectedChannelId =
-                            nState.VoiceChannel.Id;
-                        CreateLogEntry(
-                            LogSeverity.Info,
-                            "Voice Client",
-                            $"Channel changed! New channel: {nState.VoiceChannel.Name}");
-                    }
-                }
+                return Task.CompletedTask;
             }
+
+            if (nState.VoiceChannel == null)
+            {
+                return Task.CompletedTask;
+            }
+
+            if (!_musicPlayerSingleton.ActiveAudioClients.ContainsKey(nState.VoiceChannel.Guild.Id))
+            {
+                return Task.CompletedTask;
+            }
+
+            _musicPlayerSingleton.ActiveAudioClients[nState.VoiceChannel.Guild.Id].ConnectedChannelId =
+                nState.VoiceChannel.Id;
+            CreateLogEntry(
+                LogSeverity.Info,
+                "Voice Client",
+                $"Channel changed! New channel: {nState.VoiceChannel.Name}");
 
             return Task.CompletedTask;
         };

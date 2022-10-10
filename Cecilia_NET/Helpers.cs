@@ -29,25 +29,6 @@ public static class Helpers
         return outBuilder;
     }
 
-    public static bool IsChannelValid(SocketCommandContext ctx, MusicPlayer player)
-    {
-        // Check if bot is in a channel
-        if (player.ActiveAudioClients[ctx.Guild.Id].Client.ConnectionState == ConnectionState.Disconnected)
-        {
-            return false;
-        }
-
-        // Check if they are in a channel
-        var guildUser = (SocketGuildUser) ctx.User;
-        if (guildUser.VoiceChannel == null)
-        {
-            return false;
-        }
-
-        // They have to in the bots channel
-        return guildUser.VoiceChannel.Id == player.ActiveAudioClients[ctx.Guild.Id].ConnectedChannelId;
-    }
-
     public static async Task DownloadSong(IStreamInfo streamInfo, string filePath)
     {
         var youtube = new YoutubeClient();
@@ -67,6 +48,25 @@ public static class Helpers
         }
 
         return guildUser.Nickname ?? guildUser.Username;
+    }
+
+    public static bool IsChannelValid(SocketCommandContext ctx, MusicPlayer player)
+    {
+        // Check if bot is in a channel
+        if (player.ActiveAudioClients[ctx.Guild.Id].Client.ConnectionState == ConnectionState.Disconnected)
+        {
+            return false;
+        }
+
+        // Check if they are in a channel
+        var guildUser = (SocketGuildUser)ctx.User;
+        if (guildUser.VoiceChannel == null)
+        {
+            return false;
+        }
+
+        // They have to in the bots channel
+        return guildUser.VoiceChannel.Id == player.ActiveAudioClients[ctx.Guild.Id].ConnectedChannelId;
     }
 
     // Delete the message that sent the command
