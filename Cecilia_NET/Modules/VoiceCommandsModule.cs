@@ -11,7 +11,6 @@ using Discord.WebSocket;
 using YoutubeExplode;
 using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
-using YouTubeSearch;
 
 namespace Cecilia_NET.Modules;
 
@@ -238,53 +237,10 @@ public class VoiceCommandsModule : ModuleBase<SocketCommandContext>
         response.AddField("Searching...", "Give me a minute to look that up!");
         var searchEmbed = await Context.Channel.SendMessageAsync("", false, response.Build());
 
-        // Calculate correct directory prefix for different OS
-        var directoryPrefix = Bot.OsPlatform == OSPlatform.Windows ? @"AudioCache\" : "AudioCache/";
-
         // Start youtube explode
         var youtube = new YoutubeClient();
         // Get video metadata & download thumbnail
-        Video video;
-        // Calculate the kind of data the user has passed to the command
-        // Single URL
-        if (uri.Contains("watch?v=", StringComparison.Ordinal))
-        {
-            await Bot.CreateLogEntry(LogSeverity.Info, "Command", "Video search by URL");
-            video = await youtube.Videos.GetAsync(uri);
-        }
-        // none
-        else
-        {
-            await Bot.CreateLogEntry(LogSeverity.Info, "Command", "Video search by terms");
-            // This means that it is not a uri it is a search term.
-            // So search videos
-            var items = new VideoSearch();
-            // Get the first page of videos
-            var videos = await items.GetVideos(uri, 1);
-            // find the top one
-            var topVideo = videos.First();
-            video = await youtube.Videos.GetAsync(topVideo.getUrl());
-        }
-
-        // Process correct title
-        var processedTitle = Helpers.ProcessVideoTitle(video.Title);
-
-        // Check if file exists. If it does skip the download
-        // TODO: This sucks. Make it more efficient - Michael
-        var fileExists = false;
-        foreach (var file in Directory.GetFiles(directoryPrefix))
-        {
-            var lookupFile = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                ? $"{directoryPrefix}{processedTitle}.mp3"
-                : $"{processedTitle}.mp3";
-
-            if (file == lookupFile)
-            {
-                fileExists = true;
-
-                break;
-            }
-        }
+        var video = await youtube.Videos.GetAsync(VideoId.Parse(uri));
 
         // get streams
         var streams = await youtube.Videos.Streams.GetManifestAsync(video.Id);
@@ -293,11 +249,9 @@ public class VoiceCommandsModule : ModuleBase<SocketCommandContext>
         await Context.Channel.DeleteMessageAsync(searchEmbed.Id);
         var builder = await _musicPlayer.AddSongToQueue(
             Context,
-            $"{directoryPrefix}{processedTitle}.mp3",
             video,
             streams.GetAudioOnlyStreams().GetWithHighestBitrate(),
-            uri,
-            !fileExists);
+            uri);
 
         // 4. Notify added
         await Context.Channel.SendMessageAsync("", false, builder.Build());
@@ -311,7 +265,7 @@ public class VoiceCommandsModule : ModuleBase<SocketCommandContext>
     public async Task QueueAsync()
     {
         // Get the client for this server
-        MusicPlayer.WrappedAudioClient audioClient;
+        MusicPlayer.WrappedAudioClient? audioClient;
         try
         {
             audioClient = _musicPlayer.ActiveAudioClients[Context.Guild.Id];
